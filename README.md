@@ -1,6 +1,6 @@
 # AutoRule
 
-Official repository for **AutoRule: Reasoning Chain-of-thought Extracted Rule-based Rewards Improve Preference Learning**.
+Official repository for **AutoRule: Reasoning Chain-of-thought Extracted Rule-based Rewards Improve Preference Learning**. [Arxiv](https://arxiv.org/abs/2506.15651)
 
 ![AutoRule Overview](images/AutoRule-overview.png)
 
