@@ -1,0 +1,24 @@
+accelerate
+bitsandbytes
+datasets
+deepspeed==0.16.4
+einops
+flash-attn @ https://github.com/Dao-AILab/flash-attention/releases/download/v2.7.4.post1/flash_attn-2.7.4.post1+cu12torch2.4cxx11abiFALSE-cp310-cp310-linux_x86_64.whl
+isort
+jsonlines
+loralib
+optimum
+optree>=0.13.0
+packaging
+peft
+pynvml>=12.0.0
+ray[default]==2.44.0
+tensorboard
+torch
+torchmetrics
+tqdm
+transformers==4.50.0
+transformers_stream_generator
+vllm
+wandb
+wheel

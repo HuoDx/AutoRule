@@ -1,0 +1,12 @@
+boto3
+botocore
+pandas
+dotenv
+datasets
+transformers
+vllm
+filelock
+openai
+matplotlib
+numpy
+yaml

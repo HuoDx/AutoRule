@@ -1,0 +1,6 @@
+results*
+plots/
+*.log
+__pycache__/
+wandb/
+.env
