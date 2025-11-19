@@ -1,5 +1,11 @@
 import json
+import os
 from typing import List
+
+from llm_api import ChatMessage, ContentBlock, InferenceConfig, LLMClient
+
+DEFAULT_MODEL_ID = os.getenv("LLM_MODEL_ID", "us.deepseek.r1-v1:0")
+DEFAULT_INFERENCE_CONFIG = InferenceConfig(temperature=0.6, max_tokens=32768)
 
 def get_rule_merging_prompt(rules_list: List[str]) -> str:
     rules_text = "\n".join(f"- {rule}" for rule in rules_list)
@@ -12,14 +18,19 @@ Return the merged list as a JSON array of strings. Do not use ```json```, just o
 {rules_text}
 """
 
-def get_merged_rules(rules_list: List[str], *, client) -> List[str]:
+def get_merged_rules(
+    rules_list: List[str],
+    *,
+    client: LLMClient,
+    model_id: str | None = None,
+) -> List[str]:
     prompt = get_rule_merging_prompt(rules_list)
     response = client.converse(
-        modelId="us.deepseek.r1-v1:0",
-        messages=[{"role": "user", "content": [{"text": prompt}]}],
-        inferenceConfig={"temperature": 0.6, "maxTokens": 32768},
+        model_id=model_id or DEFAULT_MODEL_ID,
+        messages=[ChatMessage(role="user", content=[ContentBlock(text=prompt)])],
+        inference_config=DEFAULT_INFERENCE_CONFIG,
     )
-    merged_text = response["output"]["message"]["content"][0]["text"].strip()
+    merged_text = (response.first_text() or "").strip()
     try:
         merged_rules = json.loads(merged_text)
         return merged_rules if isinstance(merged_rules, list) else []

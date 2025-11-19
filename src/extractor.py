@@ -1,5 +1,11 @@
 import json
+import os
 from typing import List
+
+from llm_api import ChatMessage, ContentBlock, InferenceConfig, LLMClient
+
+DEFAULT_MODEL_ID = os.getenv("LLM_MODEL_ID", "us.deepseek.r1-v1:0")
+DEFAULT_INFERENCE_CONFIG = InferenceConfig(temperature=0.6, max_tokens=32768)
 
 def get_rule_extraction_prompt(reasoning_text: str, winner: str) -> str:
     few_shot = """
@@ -19,14 +25,20 @@ Return the list as a JSON array of strings. Do not use ```json```, just output t
 {reasoning_text}
 """
 
-def get_extracted_rules(reasoning_text: str, winner: str, *, client) -> List[str] | None:
+def get_extracted_rules(
+    reasoning_text: str,
+    winner: str,
+    *,
+    client: LLMClient,
+    model_id: str | None = None,
+) -> List[str] | None:
     prompt = get_rule_extraction_prompt(reasoning_text, winner)
     response = client.converse(
-        modelId="us.deepseek.r1-v1:0",
-        messages=[{"role": "user", "content": [{"text": prompt}]}],
-        inferenceConfig={"temperature": 0.6, "maxTokens": 32768},
+        model_id=model_id or DEFAULT_MODEL_ID,
+        messages=[ChatMessage(role="user", content=[ContentBlock(text=prompt)])],
+        inference_config=DEFAULT_INFERENCE_CONFIG,
     )
-    extracted_text = response["output"]["message"]["content"][0]["text"].strip()
+    extracted_text = (response.first_text() or "").strip()
     try:
         rules = json.loads(extracted_text)
         return rules if isinstance(rules, list) else None

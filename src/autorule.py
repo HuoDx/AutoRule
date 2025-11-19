@@ -5,34 +5,37 @@ from datetime import datetime
 
 import pandas as pd
 from dotenv import load_dotenv
-import boto3
-from botocore.config import Config
+
+load_dotenv()
 
 from utils import load_mt_subset, load_ultra_subset
 from reasoner import get_explanation_response
 from extractor import get_extracted_rules
 from merger import get_merged_rules
+from llm_api import LLMClient, create_llm_client
+_llm_client: LLMClient | None = None
 
-load_dotenv()
-config = Config(read_timeout=900, connect_timeout=900)
-bedrock = boto3.client(
-    service_name="bedrock-runtime",
-    region_name="us-east-1",
-    aws_access_key_id=os.getenv("AWS_ACCESS_KEY_ID"),
-    aws_secret_access_key=os.getenv("AWS_SECRET_ACCESS_KEY"),
-    config=config,
-)
+def get_llm_client() -> LLMClient:
+    """Create the LLM client lazily so each process picks up the right provider."""
+    global _llm_client
+    if _llm_client is None:
+        _llm_client = create_llm_client()
+    return _llm_client
 
 def evaluate_example(example):
+    client = get_llm_client()
     # Step 1: explanation generation
     winner = example["winner"]
+    print('spinning up example', id(example))
     explanation_text, reasoning = get_explanation_response(
-        example["conversation_a"], example["conversation_b"], winner, client=bedrock
+        example["conversation_a"], example["conversation_b"], winner, client=client
     )
+    print('spinning up example 1.1', id(example))
     # Step 2: rule extraction
     extracted_rules = get_extracted_rules(
-        explanation_text, winner.split("_")[1].upper(), client=bedrock
+        explanation_text, winner.split("_")[1].upper(), client=client
     )
+    print('spinning up example 1.2', id(example))
     return {
         "winner": winner,
         "explanation": explanation_text,
@@ -49,7 +52,13 @@ def main():
     parser.add_argument("--uf_num_examples", type=int, default=256, help="Number of examples to evaluate (for uf)")
     parser.add_argument("--mt_num_examples_per_question", type=int, default=8, help="Number of examples to evaluate per question (for mt)")
     parser.add_argument("--num_proc", type=int, default=8, help="Number of processes to use for parallel evaluation")
+    parser.add_argument("--llm_provider", choices=["bedrock", "gemini"], default=os.getenv("LLM_PROVIDER"), help="LLM provider to use (overrides LLM_PROVIDER env var)")
     args = parser.parse_args()
+
+    if args.llm_provider:
+        os.environ["LLM_PROVIDER"] = args.llm_provider
+        global _llm_client
+        _llm_client = create_llm_client(provider=args.llm_provider)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
     results_folder = args.output_dir or f"results_{timestamp}"
@@ -60,7 +69,7 @@ def main():
     elif args.dataset_type == "mt":
         subset = load_mt_subset(k=args.mt_num_examples_per_question, train=True)
     else:
-        raise Exception(f"{args.dataset_type} not found as a dataset")
+        raise FileNotFoundError(f"{args.dataset_type} not found as a dataset")
 
     mapped_results = subset.map(evaluate_example, num_proc=args.num_proc)
     results = mapped_results.to_list()
@@ -75,7 +84,7 @@ def main():
     unique_rules = list(set(all_rules))
 
     # Step 3. merge
-    merged_rules = get_merged_rules(unique_rules, client=bedrock)
+    merged_rules = get_merged_rules(unique_rules, client=get_llm_client())
     merged_rules_filename = os.path.join(results_folder, "merged_rules.json")
     with open(merged_rules_filename, "w", encoding="utf-8") as f:
         json.dump(merged_rules, f, indent=4, ensure_ascii=False)

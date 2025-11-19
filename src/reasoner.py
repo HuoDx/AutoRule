@@ -1,4 +1,10 @@
+import os
 from typing import Tuple, List, Dict, Union
+
+from llm_api import ChatMessage, ContentBlock, InferenceConfig, LLMClient
+
+DEFAULT_MODEL_ID = os.getenv("LLM_MODEL_ID", "us.deepseek.r1-v1:0")
+DEFAULT_INFERENCE_CONFIG = InferenceConfig(temperature=0.6, max_tokens=32768)
 
 def conv_to_str(conversation: Union[List[Dict[str, str]], str]) -> str:
     if isinstance(conversation, list):
@@ -29,14 +35,15 @@ def get_explanation_response(
     conversation_b: Union[List[Dict[str, str]], str],
     winner: str,
     *,
-    client,
+    client: LLMClient,
+    model_id: str | None = None,
 ) -> Tuple[str, str]:
     prompt = get_explanation_prompt(conversation_a, conversation_b, winner)
     response = client.converse(
-        modelId="us.deepseek.r1-v1:0",
-        messages=[{"role": "user", "content": [{"text": prompt}]}],
-        inferenceConfig={"temperature": 0.6, "maxTokens": 32768},
+        model_id=model_id or DEFAULT_MODEL_ID,
+        messages=[ChatMessage(role="user", content=[ContentBlock(text=prompt)])],
+        inference_config=DEFAULT_INFERENCE_CONFIG,
     )
-    explanation_text = response["output"]["message"]["content"][0]["text"]
-    reasoning = response["output"]["message"]["content"][1]["reasoningContent"]["reasoningText"]
+    explanation_text = response.first_text() or ""
+    reasoning = response.first_reasoning() or ""
     return explanation_text, reasoning

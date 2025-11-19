@@ -4,9 +4,8 @@ pandas
 dotenv
 datasets
 transformers
-vllm
 filelock
 openai
 matplotlib
 numpy
-yaml
+google-generativeai
