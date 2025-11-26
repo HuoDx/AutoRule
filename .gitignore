@@ -4,3 +4,5 @@ plots/
 __pycache__/
 wandb/
 .env
+src/output
+*.csv

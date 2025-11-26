@@ -1,5 +1,6 @@
 import json
 from typing import List
+from llmapi import LLM
 
 def get_rule_extraction_prompt(reasoning_text: str, winner: str) -> str:
     few_shot = """
@@ -19,14 +20,16 @@ Return the list as a JSON array of strings. Do not use ```json```, just output t
 {reasoning_text}
 """
 
-def get_extracted_rules(reasoning_text: str, winner: str, *, client) -> List[str] | None:
+def get_extracted_rules(reasoning_text: str, winner: str, *, client: LLM) -> List[str] | None:
     prompt = get_rule_extraction_prompt(reasoning_text, winner)
-    response = client.converse(
-        modelId="us.deepseek.r1-v1:0",
-        messages=[{"role": "user", "content": [{"text": prompt}]}],
-        inferenceConfig={"temperature": 0.6, "maxTokens": 32768},
-    )
-    extracted_text = response["output"]["message"]["content"][0]["text"].strip()
+    # response = client.converse(
+    #     modelId="us.deepseek.r1-v1:0",
+    #     messages=[{"role": "user", "content": [{"text": prompt}]}],
+    #     inferenceConfig={"temperature": 0.6, "maxTokens": 32768},
+    # )
+    response = client.generate_json(prompt)
+    # extracted_text = response["output"]["message"]["content"][0]["text"].strip()
+    extracted_text = response.strip()
     try:
         rules = json.loads(extracted_text)
         return rules if isinstance(rules, list) else None

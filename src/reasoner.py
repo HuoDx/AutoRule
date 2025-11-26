@@ -1,4 +1,5 @@
 from typing import Tuple, List, Dict, Union
+from llmapi import LLM
 
 def conv_to_str(conversation: Union[List[Dict[str, str]], str]) -> str:
     if isinstance(conversation, list):
@@ -29,14 +30,16 @@ def get_explanation_response(
     conversation_b: Union[List[Dict[str, str]], str],
     winner: str,
     *,
-    client,
+    client: LLM,
 ) -> Tuple[str, str]:
     prompt = get_explanation_prompt(conversation_a, conversation_b, winner)
-    response = client.converse(
-        modelId="us.deepseek.r1-v1:0",
-        messages=[{"role": "user", "content": [{"text": prompt}]}],
-        inferenceConfig={"temperature": 0.6, "maxTokens": 32768},
-    )
-    explanation_text = response["output"]["message"]["content"][0]["text"]
-    reasoning = response["output"]["message"]["content"][1]["reasoningContent"]["reasoningText"]
-    return explanation_text, reasoning
+    # response = client.converse(
+    #     modelId="us.deepseek.r1-v1:0",
+    #     messages=[{"role": "user", "content": [{"text": prompt}]}],
+    #     inferenceConfig={"temperature": 0.6, "maxTokens": 32768},
+    # )
+    response_text, reasoning = client.generate(prompt)
+    # explanation_text = response["output"]["message"]["content"][0]["text"]
+    # reasoning = response["output"]["message"]["content"][1]["reasoningContent"]["reasoningText"]
+    # return explanation_text, reasoning
+    return response_text, reasoning

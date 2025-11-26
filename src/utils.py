@@ -1,9 +1,10 @@
 import random
+import base64
 from datasets import load_dataset
 import os
 from transformers import AutoTokenizer
 
-def preprocess_conversations(example, randomize):
+def preprocess_conversations(example, randomize=True):
     """
     Randomly maps the 'chosen' and 'rejected' columns to 'conversation_a' and 'conversation_b',
     and creates a 'winner' column indicating whether model_a or model_b is the winner.
@@ -182,6 +183,72 @@ def load_mt_subset(k: int = 8, train = False):
         print("Loading test set")
         return sample_k_per_qid(load_dataset("lmsys/mt_bench_human_judgments", split="human").filter(lambda example: "tie" not in example["winner"].lower()), [(86, 90), (96, 100), (106, 110), (116, 120), (126, 130), (136, 140), (146, 150), (156, 160)], k=k, first=True)
 
+IMG_PATH = '/Volumes/huodx-portable-storage/LLM Lab/images'
+def load_image(example):
+    # path 1 is always the chosen image
+    with open(os.path.join(IMG_PATH, example["path1"]), "rb") as f:
+        chosen_bytearray = f.read()
+    with open(os.path.join(IMG_PATH, example["path2"]), "rb") as f:
+        rejected_bytearray = f.read()
+    return {
+        "chosen": chosen_bytearray,
+        "rejected": rejected_bytearray
+    }
+
+class ImageFileProvider:
+    '''
+    Static class for loading images from disk
+    globally shared state
+    '''
+    img_path = IMG_PATH
+    # path -> byte array
+    memory = {}
+
+    @staticmethod
+    def load_example_images(example):
+        if example["path1"] in ImageFileProvider.memory:
+            return ImageFileProvider.memory[example["path1"]]
+        if example["path2"] in ImageFileProvider.memory:
+            return ImageFileProvider.memory[example["path2"]]
+
+        with open(os.path.join(ImageFileProvider.img_path, example["path1"]), "rb") as f:
+            chosen_bytearray = f.read()
+        with open(os.path.join(ImageFileProvider.img_path, example["path2"]), "rb") as f:
+            rejected_bytearray = f.read()
+        ImageFileProvider.memory[example["path1"]] = bytes(chosen_bytearray)
+        ImageFileProvider.memory[example["path2"]] = bytes(rejected_bytearray)
+    
+    @staticmethod
+    def retrieve(image_name):
+        if image_name in ImageFileProvider.memory:
+            return ImageFileProvider.memory[image_name]
+        print('image not loaded, loading from', image_name)
+        with open(os.path.join(ImageFileProvider.img_path, image_name), "rb") as f:
+            buffer = f.read()
+        ImageFileProvider.memory[image_name] = buffer
+        return buffer
+
+# converts into a "chosen", "rejected" format
+def construct_conversations(example):
+    # load image
+    image = ImageFileProvider.load_example_images(example)
+    # load prompt
+    prompt = example["prompt"]
+    return {
+        # in OpenAI format
+        "chosen": (prompt, example["path1"]),
+        "rejected": (prompt, example["path2"])
+    }
+
+def load_hpdv3_subset(num_examples: int):
+    # default in test mode; we're not training anything
+    # dataset = load_dataset("MizzenAI/HPDv3")
+    # load filtered subset from csv
+    dataset = load_dataset("csv", data_files="./filtered_dataset.csv", split="train")
+    return dataset.select(range(num_examples))\
+        .map(construct_conversations)\
+        .map(preprocess_conversations)
+
 # UltraFeedback rules
 # rules = [
 #     "The assistant's responses should present explanations in a coherent, step-by-step structure with logical flow, numbered points, and clear sections.",
@@ -210,7 +277,6 @@ def load_mt_subset(k: int = 8, train = False):
 #     "Use collaborative language and hierarchical organization for complex information.",
 #     "Balance thoroughness with brevity to prevent information overload while ensuring clarity."
 # ]
-
 
 
 # MT-Bench rules
@@ -270,3 +336,51 @@ rules = [
 #     "Link concepts to real-world impacts, case studies, and stakeholder outcomes.",
 #     "Adopt solution-oriented tone with proactive guidance and troubleshooting tips."
 # ]
+
+def prepare_filtered_dataset(img_path = "/Volumes/huodx-portable-storage/LLM Lab/images"):
+    dataset = load_dataset("MizzenAI/HPDv3", split="train")
+    # pre-screen s.t. the row has two paths both exist under img_path
+    # extract all image names from img_path 
+    img_names = set(os.listdir(img_path))
+    # remove the prefix "images/" from the dataset rows
+    dataset = dataset.map(lambda x: {"path1": x['path1'].replace('images/', ''), "path2": x['path2'].replace('images/', '')})
+    print(f"Found {len(img_names)} images in {img_path}")
+    
+    # preview 5 rows for sanity check, print it nicer to terminal
+    import json
+    print("Preview of first 5 rows:")
+    print(json.dumps(dataset[:5], indent=2, default=str))
+
+    # filter dataset
+    filtered_dataset = dataset.filter(lambda x: x['path1'] in img_names and x['path2'] in img_names)
+
+    # write to csv
+    filtered_dataset.to_csv("filtered_dataset.csv")
+    return filtered_dataset
+    
+if __name__ == "__main__":
+    import matplotlib.pyplot as plt
+    SAMPLE_SIZE = 5
+    # let's load and visualize the subset:
+    test_dataset = load_hpdv3_subset(SAMPLE_SIZE)
+    import pprint
+    for image in test_dataset[:]['conversation_a']:
+        img_key = image[1]
+        img = ImageFileProvider.retrieve(img_key)
+        print(img)
+        # pprint.pprint(image_provider.retrieve(image))
+    # pprint.pprint(test_dataset[:]['conversation_b'])
+    # display the images, side by side with prompt
+    # import matplotlib.image as mpimg
+    # for i in range(SAMPLE_SIZE):
+    #     img1 = mpimg.imread(os.path.join("/Volumes/huodx-portable-storage/LLM Lab/images", test_dataset[i]['path1']))
+    #     img2 = mpimg.imread(os.path.join("/Volumes/huodx-portable-storage/LLM Lab/images", test_dataset[i]['path2']))
+    #     plt.subplot(1, 2, 1)
+    #     plt.imshow(img1, label="Image 1")
+    #     plt.subplot(1, 2, 2)
+    #     plt.imshow(img2, label="Image 2")
+    #     # show the prompt
+    #     plt.title(test_dataset[i]['prompt'])    
+    #     plt.legend()
+    #     plt.show()
+        
